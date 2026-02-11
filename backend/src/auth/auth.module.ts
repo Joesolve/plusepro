@@ -11,6 +11,15 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { MicrosoftStrategy } from './strategies/microsoft.strategy';
 
+// Only register OAuth strategies if credentials are configured
+const optionalProviders = [];
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  optionalProviders.push(GoogleStrategy);
+}
+if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
+  optionalProviders.push(MicrosoftStrategy);
+}
+
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
@@ -28,8 +37,7 @@ import { MicrosoftStrategy } from './strategies/microsoft.strategy';
     AuthService,
     JwtStrategy,
     LocalStrategy,
-    GoogleStrategy,
-    MicrosoftStrategy,
+    ...optionalProviders,
     // Apply rate limiting globally
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
