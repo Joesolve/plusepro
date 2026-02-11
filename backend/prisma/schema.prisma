@@ -1,0 +1,501 @@
+// PulsePro - Multi-Tenant B2B SaaS Schema
+// All tenant-scoped entities include a tenantId foreign key for data isolation
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// TENANT & SUBSCRIPTION
+// ============================================================
+
+model Tenant {
+  id            String   @id @default(uuid())
+  name          String
+  slug          String   @unique
+  domain        String?  @unique
+  logoUrl       String?
+  primaryColor  String   @default("#1E3A5F")
+  secondaryColor String  @default("#00B4A6")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  users           User[]
+  departments     Department[]
+  teams           Team[]
+  subscription    Subscription?
+  coreValues      CoreValue[]
+  surveys         Survey[]
+  suggestions     Suggestion[]
+  recognitions    Recognition[]
+  notifications   Notification[]
+  selfAssessments SelfAssessment[]
+  assessmentCycles AssessmentCycle[]
+
+  @@map("tenants")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  tenantId             String             @unique
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  plan                 SubscriptionPlan   @default(STARTER)
+  status               SubscriptionStatus @default(ACTIVE)
+  maxEmployees         Int                @default(25)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionPlan {
+  STARTER  // 25 employees, $49/mo
+  GROWTH   // 100 employees, $149/mo
+  SCALE    // 500 employees, $349/mo
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+  UNPAID
+}
+
+// ============================================================
+// USER & ROLES
+// ============================================================
+
+model User {
+  id            String    @id @default(uuid())
+  tenantId      String?   // null for super_admin
+  email         String    @unique
+  passwordHash  String?   // null for OAuth-only users
+  firstName     String
+  lastName      String
+  avatarUrl     String?
+  role          Role      @default(EMPLOYEE)
+  isActive      Boolean   @default(true)
+  emailVerified DateTime?
+  lastLoginAt   DateTime?
+  deletedAt     DateTime? // Soft delete for GDPR
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // OAuth accounts
+  accounts Account[]
+
+  // Organizational relations
+  tenant       Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  teamId       String?
+  team         Team?       @relation("TeamMembers", fields: [teamId], references: [id])
+  managedTeams Team[]      @relation("TeamManager")
+
+  // Survey relations
+  surveyResponses   SurveyResponse[]
+  surveyAssignments SurveyAssignment[]
+
+  // Self-assessment relations
+  selfAssessments        SelfAssessment[]      @relation("SelfAssessor")
+  managerAssessments     SelfAssessment[]      @relation("ManagerAssessor")
+
+  // Suggestion relations
+  suggestions Suggestion[]
+
+  // Recognition relations
+  sentRecognitions     Recognition[] @relation("RecognitionSender")
+  receivedRecognitions Recognition[] @relation("RecognitionReceiver")
+
+  // Notification relations
+  notifications Notification[]
+
+  @@index([tenantId])
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String  // "oauth" | "credentials"
+  provider          String  // "google" | "microsoft" | "credentials"
+  providerAccountId String
+  refreshToken      String?
+  accessToken       String?
+  expiresAt         Int?
+  tokenType         String?
+  scope             String?
+  idToken           String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+enum Role {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+// ============================================================
+// ORGANIZATION STRUCTURE
+// ============================================================
+
+model Department {
+  id       String @id @default(uuid())
+  tenantId String
+  name     String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  teams  Team[]
+  users  User[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("departments")
+}
+
+model Team {
+  id           String @id @default(uuid())
+  tenantId     String
+  departmentId String
+  name         String
+  managerId    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  manager    User?      @relation("TeamManager", fields: [managerId], references: [id])
+  members    User[]     @relation("TeamMembers")
+
+  @@unique([tenantId, departmentId, name])
+  @@index([tenantId])
+  @@index([departmentId])
+  @@map("teams")
+}
+
+// ============================================================
+// CORE VALUES
+// ============================================================
+
+model CoreValue {
+  id          String @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  iconUrl     String?
+  sortOrder   Int    @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  questions       SurveyQuestion[] @relation("QuestionCoreValue")
+  selfAssessments SelfAssessment[]
+  recognitions    Recognition[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("core_values")
+}
+
+// ============================================================
+// SURVEYS
+// ============================================================
+
+model Survey {
+  id          String       @id @default(uuid())
+  tenantId    String
+  title       String
+  description String?
+  status      SurveyStatus @default(DRAFT)
+  isAnonymous Boolean      @default(true)
+
+  // Scheduling
+  scheduleType  ScheduleType? // null = one-time
+  scheduleDay   Int?          // day of week (0-6) or day of month (1-31)
+  nextRunAt     DateTime?
+  lastRunAt     DateTime?
+
+  // Metadata
+  createdById String?
+  publishedAt DateTime?
+  closesAt    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  questions   SurveyQuestion[]
+  assignments SurveyAssignment[]
+  responses   SurveyResponse[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("surveys")
+}
+
+model SurveyQuestion {
+  id          String       @id @default(uuid())
+  surveyId    String
+  text        String
+  type        QuestionType
+  isRequired  Boolean      @default(true)
+  sortOrder   Int          @default(0)
+  coreValueId String?
+
+  // For likert_scale: min/max range; for multiple_choice: JSON options array
+  options Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  coreValue CoreValue? @relation("QuestionCoreValue", fields: [coreValueId], references: [id])
+  answers   SurveyAnswer[]
+
+  @@index([surveyId])
+  @@map("survey_questions")
+}
+
+model SurveyAssignment {
+  id        String           @id @default(uuid())
+  surveyId  String
+  userId    String
+  status    AssignmentStatus @default(PENDING)
+  assignedAt DateTime        @default(now())
+  completedAt DateTime?
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, userId])
+  @@index([userId])
+  @@index([status])
+  @@map("survey_assignments")
+}
+
+model SurveyResponse {
+  id        String   @id @default(uuid())
+  surveyId  String
+  userId    String?  // null if anonymous
+  createdAt DateTime @default(now())
+
+  survey  Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user    User?          @relation(fields: [userId], references: [id])
+  answers SurveyAnswer[]
+
+  @@index([surveyId])
+  @@map("survey_responses")
+}
+
+model SurveyAnswer {
+  id         String @id @default(uuid())
+  responseId String
+  questionId String
+
+  // Stores the answer value — numeric for likert/yes_no, text for open_text,
+  // selected option index for multiple_choice
+  numericValue Int?
+  textValue    String?
+
+  createdAt DateTime @default(now())
+
+  response SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([responseId, questionId])
+  @@map("survey_answers")
+}
+
+enum SurveyStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum QuestionType {
+  LIKERT_SCALE
+  MULTIPLE_CHOICE
+  YES_NO
+  OPEN_TEXT
+}
+
+enum ScheduleType {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+}
+
+enum AssignmentStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+// ============================================================
+// SELF-ASSESSMENTS
+// ============================================================
+
+model AssessmentCycle {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  selfAssessments SelfAssessment[]
+
+  @@index([tenantId])
+  @@map("assessment_cycles")
+}
+
+model SelfAssessment {
+  id              String         @id @default(uuid())
+  tenantId        String
+  cycleId         String
+  employeeId      String         // The employee being assessed
+  assessorId      String         // Either the employee (self) or their manager
+  coreValueId     String
+  rating          Int            // 1-10
+  comment         String?
+  assessmentType  AssessmentType
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cycle     AssessmentCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  employee  User            @relation("SelfAssessor", fields: [employeeId], references: [id], onDelete: Cascade)
+  assessor  User            @relation("ManagerAssessor", fields: [assessorId], references: [id], onDelete: Cascade)
+  coreValue CoreValue       @relation(fields: [coreValueId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, employeeId, assessorId, coreValueId])
+  @@index([tenantId])
+  @@index([employeeId])
+  @@map("self_assessments")
+}
+
+enum AssessmentType {
+  SELF
+  MANAGER
+}
+
+// ============================================================
+// SUGGESTIONS BOX
+// ============================================================
+
+model Suggestion {
+  id        String           @id @default(uuid())
+  tenantId  String
+  userId    String?          // null for truly anonymous (we still track tenantId)
+  text      String
+  category  String?
+  tags      String[]         // PostgreSQL array
+  status    SuggestionStatus @default(NEW)
+  adminNote String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("suggestions")
+}
+
+enum SuggestionStatus {
+  NEW
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+}
+
+// ============================================================
+// RECOGNITION
+// ============================================================
+
+model Recognition {
+  id          String @id @default(uuid())
+  tenantId    String
+  senderId    String
+  receiverId  String
+  coreValueId String
+  message     String
+  isPublic    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sender    User      @relation("RecognitionSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver  User      @relation("RecognitionReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  coreValue CoreValue @relation(fields: [coreValueId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([receiverId])
+  @@index([coreValueId])
+  @@map("recognitions")
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id        String           @id @default(uuid())
+  tenantId  String
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  link      String?          // In-app navigation link
+  isRead    Boolean          @default(false)
+  emailSent Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  SURVEY_ASSIGNED
+  SURVEY_REMINDER
+  SUGGESTION_UPDATE
+  RECOGNITION_RECEIVED
+  ASSESSMENT_DUE
+  SYSTEM
+}
