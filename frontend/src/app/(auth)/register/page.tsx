@@ -29,8 +29,14 @@ export default function RegisterPage() {
       });
       router.push('/onboarding');
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { message?: string } } };
-      setError(error.response?.data?.message || 'Registration failed');
+      const axiosError = err as { response?: { data?: { message?: string } }; message?: string };
+      if (axiosError.response?.data?.message) {
+        setError(axiosError.response.data.message);
+      } else if (axiosError.message === 'Network Error') {
+        setError('Cannot reach the server. Please check that the backend is running.');
+      } else {
+        setError('Registration failed. Please try again.');
+      }
     }
   };
 

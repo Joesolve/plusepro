@@ -24,8 +24,14 @@ export default function LoginPage() {
       await login(data.email, data.password);
       router.push('/dashboard');
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { message?: string } } };
-      setError(error.response?.data?.message || 'Invalid credentials');
+      const axiosError = err as { response?: { data?: { message?: string } }; message?: string };
+      if (axiosError.response?.data?.message) {
+        setError(axiosError.response.data.message);
+      } else if (axiosError.message === 'Network Error') {
+        setError('Cannot reach the server. Please check that the backend is running.');
+      } else {
+        setError('Invalid credentials');
+      }
     }
   };
 

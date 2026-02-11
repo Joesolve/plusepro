@@ -15,6 +15,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -42,5 +43,6 @@ import { OnboardingModule } from './onboarding/onboarding.module';
     SubscriptionsModule,
     OnboardingModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
