@@ -5,11 +5,20 @@ import Stripe from 'stripe';
 
 @Injectable()
 export class SubscriptionsService {
-  private stripe: Stripe;
+  private stripe: Stripe | null = null;
 
   constructor(private prisma: PrismaService, private config: ConfigService) {
     const key = this.config.get<string>('STRIPE_SECRET_KEY');
-    this.stripe = new Stripe(key || '', { apiVersion: '2023-10-16' as any });
+    if (key) {
+      this.stripe = new Stripe(key, { apiVersion: '2023-10-16' as any });
+    }
+  }
+
+  private getStripe(): Stripe {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not configured. Set STRIPE_SECRET_KEY environment variable.');
+    }
+    return this.stripe;
   }
 
   async createCheckoutSession(tenantId: string, plan: string) {
@@ -24,7 +33,7 @@ export class SubscriptionsService {
     const selected = prices[plan];
     if (!selected) throw new BadRequestException('Invalid plan');
 
-    const session = await this.stripe.checkout.sessions.create({
+    const session = await this.getStripe().checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [{ price_data: { currency: 'usd', product_data: { name: `PulsePro ${selected.name}` }, unit_amount: selected.price, recurring: { interval: 'month' } }, quantity: 1 }],
@@ -40,7 +49,7 @@ export class SubscriptionsService {
     const webhookSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
     let event: Stripe.Event;
     try {
-      event = this.stripe.webhooks.constructEvent(payload, signature, webhookSecret || '');
+      event = this.getStripe().webhooks.constructEvent(payload, signature, webhookSecret || '');
     } catch {
       throw new BadRequestException('Invalid webhook signature');
     }
@@ -84,7 +93,7 @@ export class SubscriptionsService {
   async cancelSubscription(tenantId: string) {
     const sub = await this.prisma.subscription.findFirst({ where: { tenantId } });
     if (!sub?.stripeSubscriptionId) throw new BadRequestException('No active subscription');
-    await this.stripe.subscriptions.cancel(sub.stripeSubscriptionId);
+    await this.getStripe().subscriptions.cancel(sub.stripeSubscriptionId);
     await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'CANCELED', plan: 'STARTER' } });
     return { canceled: true };
   }

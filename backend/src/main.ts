@@ -9,9 +9,12 @@ async function bootstrap() {
   // Security headers
   app.use(helmet());
 
-  // CORS - allow frontend origin
+  // CORS - allow frontend origin(s)
+  const allowedOrigins = process.env.APP_URL
+    ? process.env.APP_URL.split(',').map((o) => o.trim())
+    : ['http://localhost:3000'];
   app.enableCors({
-    origin: process.env.APP_URL || 'http://localhost:3000',
+    origin: allowedOrigins,
     credentials: true,
   });
 
