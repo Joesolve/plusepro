@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const geist = localFont({
+  src: './fonts/GeistVF.woff',
+  variable: '--font-geist',
+});
 
 export const metadata: Metadata = {
   title: 'PulsePro - Employee Engagement Platform',
@@ -16,7 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} antialiased bg-gray-50 text-gray-900`}>
+      <body className={`${geist.className} antialiased bg-gray-50 text-gray-900`}>
         {children}
       </body>
     </html>
