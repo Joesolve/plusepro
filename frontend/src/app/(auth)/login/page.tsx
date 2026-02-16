@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, type LoginFormData } from '@/lib/validators';
 import { useAuthStore } from '@/store/auth-store';
+import { extractErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -24,14 +25,7 @@ export default function LoginPage() {
       await login(data.email, data.password);
       router.push('/dashboard');
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string } }; message?: string };
-      if (axiosError.response?.data?.message) {
-        setError(axiosError.response.data.message);
-      } else if (axiosError.message === 'Network Error') {
-        setError('Cannot reach the server. Please check that the backend is running.');
-      } else {
-        setError('Invalid credentials');
-      }
+      setError(extractErrorMessage(err, 'Invalid credentials'));
     }
   };
 

@@ -11,11 +11,16 @@ async function bootstrap() {
 
   // CORS - allow frontend origin(s)
   const allowedOrigins = process.env.APP_URL
-    ? process.env.APP_URL.split(',').map((o) => o.trim())
+    ? process.env.APP_URL.split(',')
+        .map((o) => o.trim().replace(/\/+$/, ''))
+        .filter(Boolean)
     : ['http://localhost:3000'];
+  console.log('CORS allowed origins:', allowedOrigins);
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // Global validation pipe for DTOs

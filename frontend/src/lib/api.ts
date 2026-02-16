@@ -32,4 +32,20 @@ api.interceptors.response.use(
   },
 );
 
+/**
+ * Extract a human-readable error message from an axios error.
+ * Handles NestJS responses (message can be string or string[]) and network errors.
+ */
+export function extractErrorMessage(err: unknown, fallback: string): string {
+  const error = err as { response?: { data?: { message?: string | string[] } }; message?: string };
+  if (error.response?.data?.message) {
+    const msg = error.response.data.message;
+    return Array.isArray(msg) ? msg.join(', ') : msg;
+  }
+  if (error.message === 'Network Error') {
+    return 'Cannot reach the server. Please check that the backend is running and CORS is configured.';
+  }
+  return fallback;
+}
+
 export default api;
